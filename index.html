@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>월드 잡 트립</title>
+<style>
+  :root {
+    --bg: #f4efe6; --card: #fffdf8; --ink: #2b2a28; --muted: #7a746b;
+    --accent: #e4572e; --accent2: #2e86ab; --ok: #3a9e5c; --bad: #d64545;
+    --ocean: #a9d6e5; --land: #cfe3b4; --line: #e2dccf;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+  #app { max-width: 960px; margin: 0 auto; padding: 16px; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  h1 { font-size: 22px; margin: 0; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-weight: 600; font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  button { font: inherit; cursor: pointer; border: none; border-radius: 12px; padding: 10px 16px; font-weight: 700;
+    background: var(--accent); color: #fff; transition: transform .08s, filter .15s; }
+  button:hover { filter: brightness(1.07); }
+  button:active { transform: scale(.96); }
+  button.secondary { background: #ebe5d9; color: var(--ink); }
+  button.blue { background: var(--accent2); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .hidden { display: none !important; }
+
+  /* Map */
+  #map { position: relative; width: 100%; aspect-ratio: 2 / 1; background: var(--ocean); border-radius: 16px; overflow: hidden; border: 1px solid var(--line); }
+  .land { position: absolute; background: var(--land); border-radius: 45%; opacity: .95; }
+  .city { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; cursor: pointer; z-index: 2; }
+  .city .dot { width: 34px; height: 34px; border-radius: 50%; background: #fff; display: grid; place-items: center; font-size: 18px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25); border: 3px solid #fff; transition: transform .15s; }
+  .city:hover .dot { transform: scale(1.15); }
+  .city.here .dot { border-color: var(--accent); animation: pulse 1.4s infinite; }
+  .city.done .dot { background: #ffe9a8; }
+  .city .name { font-size: 12px; font-weight: 700; background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 6px; margin-top: 3px; white-space: nowrap; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(228,87,46,.6);} 50% { box-shadow: 0 0 0 10px rgba(228,87,46,0);} }
+  #plane { position: absolute; font-size: 28px; transform: translate(-50%, -50%); z-index: 3; pointer-events: none; transition: left 1.2s ease-in-out, top 1.2s ease-in-out; }
+  svg.route { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } .city .name { font-size: 10px; } .city .dot { width: 26px; height: 26px; font-size: 14px; } }
+  .stamps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 8px; }
+  .stamp { aspect-ratio: 1; border: 2px dashed var(--line); border-radius: 12px; display: grid; place-items: center; font-size: 24px; color: var(--line); }
+  .stamp.got { border: 2px solid var(--accent); color: inherit; background: #fff3ec; transform: rotate(-6deg); }
+  .muted { color: var(--muted); font-size: 14px; }
+  h2 { margin: 0 0 8px; font-size: 18px; }
+
+  /* Modal / game */
+  #overlay { position: fixed; inset: 0; background: rgba(30,25,20,.55); display: grid; place-items: center; padding: 16px; z-index: 50; }
+  #modal { width: min(720px, 100%); max-height: calc(100vh - 32px); overflow: auto; }
+  .gamehead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .hud { display: flex; gap: 8px; }
+  .arena { position: relative; background: #f7f2e8; border-radius: 12px; min-height: 300px; padding: 12px; overflow: hidden; user-select: none; -webkit-user-select: none; }
+  .center { text-align: center; }
+  .big { font-size: 48px; }
+  .btngrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .btngrid button { font-size: 28px; background: #fff; color: var(--ink); border: 2px solid var(--line); padding: 10px 4px; }
+  .btngrid button small { display: block; font-size: 11px; color: var(--muted); }
+  .seq { display: flex; justify-content: center; gap: 6px; min-height: 64px; font-size: 40px; margin: 12px 0; flex-wrap: wrap; }
+  .flash-ok { animation: fok .4s; } .flash-bad { animation: fbad .4s; }
+  @keyframes fok { 0% { background: #c9f0d3; } } @keyframes fbad { 0% { background: #f8c9c9; } }
+  .dig { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 360px; margin: 0 auto; }
+  .dig div { aspect-ratio: 1; background: #e8c98f; border-radius: 6px; display: grid; place-items: center; font-weight: 800; cursor: pointer; font-size: 18px; }
+  .dig div.open { background: #f4e5c2; cursor: default; }
+  .fish { position: absolute; font-size: 36px; cursor: pointer; line-height: 1; }
+  .lanes { position: relative; height: 340px; max-width: 300px; margin: 0 auto; background: #555; border-radius: 10px; overflow: hidden; }
+  .lanes .ln { position: absolute; top: 0; bottom: 0; width: 0; border-left: 3px dashed #ddd; }
+  .obj { position: absolute; font-size: 32px; transform: translateX(-50%); }
+  .arrowbig { font-size: 90px; text-align: center; margin: 10px 0; }
+  .bar { height: 10px; background: #e5dfd2; border-radius: 99px; overflow: hidden; max-width: 360px; margin: 0 auto; }
+  .bar > div { height: 100%; background: var(--accent); }
+  .ctrls { display: flex; gap: 8px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+  .ctrls button { font-size: 26px; min-width: 64px; }
+  .fact { background: #eef6fa; border-radius: 10px; padding: 10px 12px; font-size: 14px; margin-top: 10px; }
+  .log { font-size: 13px; color: var(--muted); max-height: 110px; overflow: auto; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>✈️ 월드 잡 트립</h1>
+    <div class="stats">
+      <span class="pill" id="sMoney"></span>
+      <span class="pill" id="sDay"></span>
+      <span class="pill" id="sStamp"></span>
+    </div>
+  </header>
+
+  <div id="map"></div>
+
+  <div class="row">
+    <div class="card" id="here"></div>
+    <div class="card">
+      <h2>🛂 직업 여권</h2>
+      <div class="muted">각 도시의 직업에서 60점 이상을 받으면 도장을 받아요. 6개를 모두 모으세요!</div>
+      <div class="stamps" id="stamps"></div>
+      <div class="log" id="log"></div>
+      <div style="margin-top:8px"><button class="secondary" id="resetBtn">처음부터 다시</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay" class="hidden"><div id="modal" class="card"></div></div>
+
+<script>
+// ---------- Data ----------
+const CITIES = {
+  seoul:  { name: '서울', flag: '🇰🇷', lon: 127, lat: 37.5, home: true, dx: -3, dy: -2 },
+  tokyo:  { name: '도쿄', flag: '🇯🇵', lon: 139.7, lat: 35.7, job: 'sushi', dx: 2, dy: 4 },
+  paris:  { name: '파리', flag: '🇫🇷', lon: 2.35, lat: 48.9, job: 'pastry' },
+  cairo:  { name: '카이로', flag: '🇪🇬', lon: 31.2, lat: 30, job: 'dig' },
+  newyork:{ name: '뉴욕', flag: '🇺🇸', lon: -74, lat: 40.7, job: 'taxi' },
+  rio:    { name: '리우', flag: '🇧🇷', lon: -43.2, lat: -22.9, job: 'dance' },
+  sydney: { name: '시드니', flag: '🇦🇺', lon: 151.2, lat: -33.9, job: 'marine' },
+};
+const JOBS = {
+  sushi:  { title: '스시 셰프', icon: '🍣', pay: 450, desc: '주문표를 보고 재료를 골라 접시에 올린 뒤 내보내세요. 40초 동안 8접시가 목표!',
+            fact: '일본의 스시 장인은 밥 짓기만 몇 년을 배운다고 해요. 밥의 온도와 식초 비율이 맛을 좌우합니다.' },
+  pastry: { title: '파티시에', icon: '🥐', pay: 400, desc: '셰프가 보여주는 재료 순서를 기억했다가 똑같이 넣으세요. 라운드마다 길어져요!',
+            fact: '제과는 "과학"이라고 불릴 만큼 계량이 정확해야 해요. 프랑스에는 최고 장인에게 주는 MOF 칭호가 있어요.' },
+  dig:    { title: '고고학자', icon: '🏺', pay: 500, desc: '모래 속에 유물 4개가 묻혀 있어요. 삽은 14번! 빈칸의 숫자는 가장 가까운 유물까지의 거리예요.',
+            fact: '고고학자는 붓과 작은 삽으로 몇 cm씩 조심스럽게 파고, 발견 위치를 모두 기록해요.' },
+  taxi:   { title: '택시 기사', icon: '🚕', pay: 420, desc: '← → 키(또는 버튼)로 차선을 바꿔 손님 🙋을 태우고 공사장 🚧은 피하세요. 30초!',
+            fact: '뉴욕의 노란 택시 "옐로 캡"은 약 1만 3천 대가 넘고, 기사가 되려면 지리 시험을 봐야 해요.' },
+  dance:  { title: '카니발 댄서', icon: '💃', pay: 430, desc: '화면의 화살표와 같은 방향키(또는 버튼)를 시간 안에 누르세요. 점점 빨라져요!',
+            fact: '리우 카니발의 삼바 스쿨들은 1년 내내 의상과 안무를 준비해 퍼레이드에서 경쟁해요.' },
+  marine: { title: '해양생물학자', icon: '🐢', pay: 480, desc: '헤엄치는 바다거북 🐢을 클릭해 위치 태그를 다세요. 상어 🦈를 건드리면 감점! 30초 동안 10마리가 목표.',
+            fact: '해양생물학자는 거북이에 위성 태그를 달아 이동 경로를 연구하고, 산호초 보호에 활용해요.' },
+};
+const ORDER = ['tokyo','paris','cairo','newyork','rio','sydney'];
+
+// ---------- State ----------
+const START = { money: 800, city: 'seoul', day: 1, stamps: {}, best: {}, log: [], ended: false };
+let S = load();
+function load() {
+  try { const s = JSON.parse(localStorage.getItem('worldJobTrip')); if (s && CITIES[s.city]) return s; } catch (e) {}
+  return structuredClone(START);
+}
+function save() { try { localStorage.setItem('worldJobTrip', JSON.stringify(S)); } catch (e) {} }
+function addLog(t) { S.log.unshift(`Day ${S.day} · ${t}`); S.log = S.log.slice(0, 30); }
+
+const $ = id => document.getElementById(id);
+const xy = c => ({ x: (c.lon + 180) / 360 * 100 + (c.dx || 0), y: (90 - c.lat) / 180 * 100 + (c.dy || 0) });
+function cost(a, b) {
+  const A = CITIES[a], B = CITIES[b];
+  let dl = Math.abs(A.lon - B.lon); if (dl > 180) dl = 360 - dl;
+  const d = Math.hypot(dl, A.lat - B.lat);
+  return Math.round((60 + d * 2.2) / 10) * 10;
+}
+function travelDays(a, b) { return cost(a, b) > 300 ? 2 : 1; }
+
+// ---------- Map ----------
+const LANDS = [ // rough decorative continents [left, top, width, height] in %
+  [14,14,20,22],[22,34,8,8],[29,52,12,28],[44,12,16,18],[46,30,16,34],[58,10,34,30],[70,38,12,12],[82,60,12,14],[86,26,4,10]
+];
+function renderMap() {
+  const m = $('map'); m.innerHTML = '';
+  LANDS.forEach(([l,t,w,h]) => { const d = document.createElement('div'); d.className = 'land';
+    Object.assign(d.style, { left: l+'%', top: t+'%', width: w+'%', height: h+'%' }); m.appendChild(d); });
+  for (const [id, c] of Object.entries(CITIES)) {
+    const p = xy(c), el = document.createElement('div');
+    el.className = 'city' + (id === S.city ? ' here' : '') + (S.stamps[id] ? ' done' : '');
+    el.style.left = p.x + '%'; el.style.top = p.y + '%';
+    const icon = c.home ? '🏠' : (S.stamps[id] ? '⭐' : JOBS[c.job].icon);
+    el.innerHTML = `<div class="dot">${icon}</div><div class="name">${c.flag} ${c.name}</div>`;
+    el.onclick = () => clickCity(id);
+    m.appendChild(el);
+  }
+  const p = xy(CITIES[S.city]);
+  const plane = document.createElement('div'); plane.id = 'plane'; plane.textContent = '✈️';
+  plane.style.left = p.x + '%'; plane.style.top = (p.y - 7) + '%';
+  m.appendChild(plane);
+}
+
+function renderAll() {
+  $('sMoney').textContent = `💰 $${S.money}`;
+  $('sDay').textContent = `📅 ${S.day}일차`;
+  $('sStamp').textContent = `🛂 ${Object.keys(S.stamps).length} / 6`;
+  renderMap();
+  const c = CITIES[S.city];
+  let h = `<h2>${c.flag} 지금 ${c.name}에 있어요</h2>`;
+  if (c.home) {
+    h += `<p class="muted">고향 서울이에요. 지도에서 도시를 눌러 여행을 떠나세요! 각 도시에서 일을 하면 여행 경비를 벌 수 있어요.</p>`;
+    if (S.money < cost('seoul', 'tokyo')) h += `<button id="allowBtn" class="blue">👪 부모님께 용돈 받기 (+$200)</button>`;
+  } else {
+    const j = JOBS[c.job];
+    h += `<p><b>${j.icon} ${j.title}</b> 체험이 가능해요.<br><span class="muted">최대 수입 $${j.pay} · 최고 점수 ${S.best[S.city] ?? '-'}점</span></p>
+          <button id="workBtn">${j.icon} 일하러 가기</button>`;
+  }
+  h += `<p class="muted" style="margin-top:10px">💡 다른 도시를 클릭하면 항공권 가격을 볼 수 있어요.</p>`;
+  $('here').innerHTML = h;
+  if ($('workBtn')) $('workBtn').onclick = () => openJob(S.city);
+  if ($('allowBtn')) $('allowBtn').onclick = () => { S.money += 200; S.day++; addLog('부모님께 용돈 +$200'); save(); renderAll(); };
+  $('stamps').innerHTML = ORDER.map(id => {
+    const j = JOBS[CITIES[id].job];
+    return `<div class="stamp ${S.stamps[id] ? 'got' : ''}" title="${CITIES[id].name} · ${j.title}">${S.stamps[id] ? j.icon : '?'}</div>`;
+  }).join('');
+  $('log').innerHTML = S.log.map(l => `<div>${l}</div>`).join('');
+}
+
+// ---------- Modal ----------
+let cleanups = [];
+function cleanup() { cleanups.forEach(f => f()); cleanups = []; }
+function openModal(html) { $('modal').innerHTML = html; $('overlay').classList.remove('hidden'); }
+function closeModal() { cleanup(); $('overlay').classList.add('hidden'); }
+
+function clickCity(id) {
+  if (id === S.city) { if (!CITIES[id].home) openJob(id); return; }
+  const c = CITIES[id], price = cost(S.city, id), days = travelDays(S.city, id);
+  const job = c.home ? '고향으로 돌아가요.' : `${JOBS[c.job].icon} <b>${JOBS[c.job].title}</b> 체험이 기다리고 있어요.`;
+  const can = S.money >= price;
+  openModal(`<h2>${c.flag} ${c.name}(으)로 갈까요?</h2>
+    <p>${job}</p>
+    <p>🎫 항공권 <b>$${price}</b> · 비행 ${days}일</p>
+    ${can ? '' : `<p style="color:var(--bad)">돈이 부족해요! ${CITIES[S.city].home ? '' : '지금 도시에서 일을 해서 경비를 벌어보세요.'}</p>`}
+    <div class="ctrls"><button id="goBtn" ${can ? '' : 'disabled'}>✈️ 출발!</button><button class="secondary" id="noBtn">취소</button></div>`);
+  $('noBtn').onclick = closeModal;
+  $('goBtn').onclick = () => {
+    S.money -= price; S.day += days; const from = S.city; S.city = id;
+    addLog(`${CITIES[from].name} → ${c.name} 비행 (-$${price})`);
+    closeModal(); save();
+    // animate plane
+    const plane = $('plane'), p = xy(c);
+    plane.style.left = p.x + '%'; plane.style.top = (p.y - 7) + '%';
+    setTimeout(renderAll, 1250);
+  };
+}
+
+function openJob(cityId) {
+  const j = JOBS[CITIES[cityId].job];
+  openModal(`<h2>${j.icon} ${CITIES[cityId].name}의 ${j.title}</h2>
+    <p>${j.desc}</p>
+    <div class="fact">📚 <b>직업 이야기</b> — ${j.fact}</div>
+    <div class="ctrls"><button id="startBtn">시작하기</button><button class="secondary" id="noBtn">나중에</button></div>`);
+  $('noBtn').onclick = closeModal;
+  $('startBtn').onclick = () => runGame(cityId);
+}
+
+function runGame(cityId) {
+  const key = CITIES[cityId].job, j = JOBS[key];
+  $('modal').innerHTML = `<div class="gamehead"><h2 style="margin:0">${j.icon} ${j.title}</h2>
+    <div class="hud"><span class="pill" id="hudA"></span><span class="pill" id="hudB"></span></div></div>
+    <div class="arena" id="arena"></div>
+    <div class="ctrls"><button class="secondary" id="quitBtn">그만두기</button></div>`;
+  let done = false;
+  const finish = score => {
+    if (done) return; done = true; cleanup();
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    showResult(cityId, score);
+  };
+  $('quitBtn').onclick = () => finish(0);
+  GAMES[key]($('arena'), finish, (a, b) => { if (a != null) $('hudA').textContent = a; if (b != null) $('hudB').textContent = b; });
+}
+
+function showResult(cityId, score) {
+  const j = JOBS[CITIES[cityId].job];
+  const pay = Math.round(j.pay * score / 100 / 10) * 10;
+  const pass = score >= 60, first = pass && !S.stamps[cityId];
+  S.money += pay; S.day += 1;
+  S.best[cityId] = Math.max(S.best[cityId] || 0, score);
+  if (pass) S.stamps[cityId] = true;
+  addLog(`${CITIES[cityId].name} ${j.title} ${score}점 (+$${pay})${first ? ' 🛂 도장 획득!' : ''}`);
+  const grade = score >= 90 ? '🌟 천재 신입!' : score >= 60 ? '👍 합격!' : score >= 30 ? '😅 조금 아쉬워요' : '😵 다음엔 잘할 수 있어요';
+  const allDone = Object.keys(S.stamps).length === 6 && !S.ended;
+  openModal(`<div class="center">
+    <div class="big">${pass ? j.icon : '💦'}</div>
+    <h2>${grade}</h2>
+    <p style="font-size:20px"><b>${score}점</b> · 일당 <b>+$${pay}</b></p>
+    ${first ? `<p style="color:var(--accent);font-weight:800">🛂 ${CITIES[cityId].name} 도장을 받았어요!</p>` : ''}
+    ${!pass ? '<p class="muted">60점 이상이면 도장을 받아요. 다시 도전해 보세요!</p>' : ''}
+    <div class="ctrls"><button id="againBtn" class="blue">한 번 더</button><button class="secondary" id="okBtn">지도로</button></div></div>`);
+  save();
+  $('againBtn').onclick = () => runGame(cityId);
+  $('okBtn').onclick = () => { closeModal(); renderAll(); if (allDone) showEnding(); };
+  renderAll();
+}
+
+function showEnding() {
+  S.ended = true; save();
+  openModal(`<div class="center"><div class="big">🌍🎉</div>
+    <h2>세계 직업 여행 완주!</h2>
+    <p>${S.day}일 동안 6개 도시에서 6가지 직업을 체험했어요.<br>남은 돈: <b>$${S.money}</b></p>
+    <p class="muted">스시 셰프, 파티시에, 고고학자, 택시 기사, 카니발 댄서, 해양생물학자…<br>어떤 직업이 가장 마음에 들었나요?</p>
+    <p class="muted">계속 자유롭게 여행하며 최고 점수에 도전할 수 있어요.</p>
+    <div class="ctrls"><button id="okBtn">계속 여행하기</button></div></div>`);
+  $('okBtn').onclick = closeModal;
+}
+
+// ---------- Helpers ----------
+const rand = n => Math.floor(Math.random() * n);
+const pick = a => a[rand(a.length)];
+function every(ms, f) { const t = setInterval(f, ms); cleanups.push(() => clearInterval(t)); return t; }
+function after(ms, f) { const t = setTimeout(f, ms); cleanups.push(() => clearTimeout(t)); return t; }
+function onKey(f) { const h = e => f(e); window.addEventListener('keydown', h); cleanups.push(() => window.removeEventListener('keydown', h)); }
+function loop(f) { let on = true, last = performance.now();
+  const step = t => { if (!on) return; const dt = Math.min(50, t - last) / 1000; last = t; f(dt); requestAnimationFrame(step); };
+  requestAnimationFrame(step); cleanups.push(() => on = false); }
+function countdown(sec, hud, onEnd) {
+  let left = sec; hud(`⏱ ${left}초`, null);
+  every(1000, () => { left--; hud(`⏱ ${left}초`, null); if (left <= 0) onEnd(); });
+}
+function flash(el, ok) { el.classList.remove('flash-ok','flash-bad'); void el.offsetWidth; el.classList.add(ok ? 'flash-ok' : 'flash-bad'); }
+
+// ---------- Mini games ----------
+const GAMES = {
+  // 파리: 순서 기억
+  pastry(arena, finish, hud) {
+    const ING = [['🥚','달걀'],['🧈','버터'],['🍫','초콜릿'],['🍓','딸기'],['🥛','우유'],['🌾','밀가루'],['🍯','꿀'],['🍋','레몬']];
+    const LENS = [3, 4, 5, 6]; let round = 0, got = 0, total = LENS.reduce((a,b)=>a+b), seq = [], pos = 0, input = false;
+    arena.innerHTML = `<div class="center muted" id="msg"></div><div class="seq" id="seq"></div><div class="btngrid" id="bg"></div>`;
+    $('bg').innerHTML = ING.map(([e,n],i) => `<button data-i="${i}">${e}<small>${n}</small></button>`).join('');
+    const msg = $('msg'), seqEl = $('seq');
+    const nextRound = () => {
+      if (round >= LENS.length) return finish(got / total * 100);
+      hud(`라운드 ${round+1}/${LENS.length}`, `✔ ${got}`);
+      seq = Array.from({length: LENS[round]}, () => rand(ING.length)); pos = 0; input = false;
+      msg.textContent = '👀 셰프의 레시피를 잘 보세요...'; seqEl.textContent = '';
+      seq.forEach((k, i) => {
+        after(700 + i * 750, () => { seqEl.textContent = ING[k][0]; });
+        after(700 + i * 750 + 550, () => { seqEl.textContent = ''; });
+      });
+      after(700 + seq.length * 750, () => { input = true; msg.textContent = '🧑‍🍳 이제 같은 순서로 넣으세요!'; });
+    };
+    $('bg').onclick = e => {
+      const b = e.target.closest('button'); if (!b || !input) return;
+      const k = +b.dataset.i;
+      seqEl.textContent += ING[k][0];
+      if (k === seq[pos]) { pos++; got++; hud(null, `✔ ${got}`);
+        if (pos === seq.length) { input = false; flash(arena, true); msg.textContent = '🎉 완벽해요!'; round++; after(900, nextRound); }
+      } else { input = false; flash(arena, false); msg.textContent = '😣 순서가 틀렸어요! 정답: ' + seq.map(k => ING[k][0]).join(''); round++; after(1600, nextRound); }
+    };
+    nextRound();
+  },
+
+  // 도쿄: 주문 조립
+  sushi(arena, finish, hud) {
+    const ING = { rice: ['🍚','밥'], salmon: ['🐟','연어'], shrimp: ['🦐','새우'], nori: ['🟩','김'], egg: ['🥚','달걀'], cuke: ['🥒','오이'] };
+    const MENU = [
+      ['🍣 연어초밥', ['rice','salmon']], ['🍤 새우초밥', ['rice','shrimp']], ['🍙 주먹밥', ['rice','nori']],
+      ['🍳 계란초밥', ['rice','egg','nori']], ['🥒 오이마키', ['rice','cuke','nori']], ['🌈 스페셜롤', ['rice','salmon','shrimp','nori']],
+    ];
+    let served = 0, plate = [], order;
+    arena.innerHTML = `<div class="center"><div class="muted">주문</div><div style="font-size:30px;font-weight:800" id="ord"></div>
+      <div class="muted" id="hint"></div><div class="seq" id="plate" style="background:#fff;border-radius:50%;max-width:280px;margin:10px auto;padding:8px"></div></div>
+      <div class="btngrid" id="bg" style="grid-template-columns:repeat(3,1fr)"></div>
+      <div class="ctrls"><button class="secondary" id="clr">🗑 비우기</button><button class="blue" id="srv">🛎 내보내기</button></div>`;
+    $('bg').innerHTML = Object.entries(ING).map(([k,[e,n]]) => `<button data-k="${k}">${e}<small>${n}</small></button>`).join('');
+    const newOrder = () => { order = pick(MENU); plate = [];
+      $('ord').textContent = order[0];
+      $('hint').textContent = '레시피: ' + order[1].map(k => ING[k][0] + ING[k][1]).join(' + ');
+      $('plate').textContent = ''; };
+    $('bg').onclick = e => { const b = e.target.closest('button'); if (!b || plate.length >= 5) return;
+      plate.push(b.dataset.k); $('plate').textContent = plate.map(k => ING[k][0]).join(''); };
+    $('clr').onclick = () => { plate = []; $('plate').textContent = ''; };
+    $('srv').onclick = () => {
+      const ok = plate.length === order[1].length && [...plate].sort().join() === [...order[1]].sort().join();
+      flash(arena, ok); if (ok) { served++; hud(null, `🍣 ${served}/8`); newOrder(); }
+      else { plate = []; $('plate').textContent = '❌'; }
+    };
+    hud(null, `🍣 0/8`); newOrder();
+    countdown(40, hud, () => finish(served / 8 * 100));
+  },
+
+  // 카이로: 발굴
+  dig(arena, finish, hud) {
+    const N = 6, FIND = 4; let shovels = 14, found = 0;
+    const treasures = new Set(); while (treasures.size < FIND) treasures.add(rand(N*N));
+    const ITEMS = ['🏺','💎','👑','📜','🗿','⚱️'];
+    arena.innerHTML = `<p class="center muted" id="msg">모래를 클릭해서 파보세요!</p><div class="dig" id="g"></div>`;
+    const g = $('g'); for (let i = 0; i < N*N; i++) { const d = document.createElement('div'); d.dataset.i = i; g.appendChild(d); }
+    const upd = () => hud(`⛏ ${shovels}번 남음`, `🏺 ${found}/${FIND}`); upd();
+    g.onclick = e => {
+      const d = e.target.closest('div[data-i]'); if (!d || d.classList.contains('open') || shovels <= 0) return;
+      const i = +d.dataset.i; shovels--; d.classList.add('open');
+      if (treasures.has(i)) { found++; d.textContent = pick(ITEMS); d.style.background = '#ffe08a'; $('msg').textContent = '✨ 유물 발견!'; }
+      else { const r = Math.floor(i/N), c = i%N; let best = 99;
+        treasures.forEach(t => { const tr = Math.floor(t/N), tc = t%N;
+          if (!g.children[t].classList.contains('open')) best = Math.min(best, Math.abs(tr-r)+Math.abs(tc-c)); });
+        d.textContent = best === 99 ? '·' : best; d.style.color = ['','#c0392b','#e67e22','#b7950b'][best] || '#7a746b';
+        $('msg').textContent = best <= 1 ? '🔥 바로 옆에 있어요!' : best <= 2 ? '가까워요!' : '이 근처엔 없는 것 같아요...';
+      }
+      upd();
+      if (found === FIND || shovels === 0) {
+        if (found < FIND) treasures.forEach(t => { const c = g.children[t]; if (!c.classList.contains('open')) { c.textContent = '❔'; c.style.background = '#f3d6a0'; } });
+        after(1200, () => finish(found / FIND * 100 + (found === FIND ? 0 : 0)));
+      }
+    };
+  },
+
+  // 뉴욕: 택시
+  taxi(arena, finish, hud) {
+    const LX = [16.6, 50, 83.4]; let lane = 1, got = 0, crash = 0, objs = [], spawnT = 0, elapsed = 0;
+    arena.innerHTML = `<div class="lanes" id="road"><div class="ln" style="left:33.3%"></div><div class="ln" style="left:66.6%"></div>
+      <div class="obj" id="car" style="bottom:8px;font-size:40px">🚕</div></div>
+      <div class="ctrls"><button class="blue" id="L">⬅️</button><button class="blue" id="R">➡️</button></div>`;
+    const road = $('road'), car = $('car');
+    const place = () => car.style.left = LX[lane] + '%'; place();
+    const move = d => { lane = Math.max(0, Math.min(2, lane + d)); place(); };
+    $('L').onclick = () => move(-1); $('R').onclick = () => move(1);
+    onKey(e => { if (e.key === 'ArrowLeft') { e.preventDefault(); move(-1); } if (e.key === 'ArrowRight') { e.preventDefault(); move(1); } });
+    const upd = () => hud(null, `🙋 ${got}  💥 ${crash}`); upd();
+    loop(dt => {
+      elapsed += dt; spawnT -= dt;
+      const speed = 160 + elapsed * 6;
+      if (spawnT <= 0) { spawnT = Math.max(0.45, 0.85 - elapsed * 0.012);
+        const kind = Math.random() < 0.5 ? 'p' : 'x', el = document.createElement('div');
+        el.className = 'obj'; el.textContent = kind === 'p' ? '🙋' : '🚧'; const l = rand(3); el.style.left = LX[l] + '%';
+        road.appendChild(el); objs.push({ el, l, y: -40, kind }); }
+      const H = road.clientHeight;
+      objs = objs.filter(o => { o.y += speed * dt; o.el.style.top = o.y + 'px';
+        if (o.y > H - 70 && o.y < H - 20 && o.l === lane) {
+          if (o.kind === 'p') { got++; flash(road, true); } else { crash++; flash(road, false); }
+          o.el.remove(); upd(); return false; }
+        if (o.y > H) { o.el.remove(); return false; } return true; });
+    });
+    countdown(30, hud, () => finish(got * 7 - crash * 8));
+  },
+
+  // 리우: 리듬
+  dance(arena, finish, hud) {
+    const DIRS = [['ArrowUp','⬆️'],['ArrowDown','⬇️'],['ArrowLeft','⬅️'],['ArrowRight','➡️']];
+    const TOTAL = 20; let n = 0, hits = 0, cur = null, deadline = 0, win = 0, combo = 0;
+    arena.innerHTML = `<div class="center muted" id="msg">준비...</div><div class="arrowbig" id="arr">💃</div>
+      <div class="bar"><div id="tb" style="width:100%"></div></div>
+      <div class="ctrls" id="pad">${DIRS.map(([k,e]) => `<button class="blue" data-k="${k}">${e}</button>`).join('')}</div>`;
+    const upd = () => hud(`🎵 ${n}/${TOTAL}`, `✨ ${hits}  🔥${combo}`); upd();
+    const next = () => {
+      if (n >= TOTAL) { cur = null; return after(500, () => finish(hits / TOTAL * 100)); }
+      n++; cur = pick(DIRS); win = Math.max(650, 1500 - n * 45); deadline = performance.now() + win;
+      $('arr').textContent = cur[1]; upd();
+    };
+    const press = k => { if (!cur) return;
+      const ok = k === cur[0]; cur = null;
+      if (ok) { hits++; combo++; $('msg').textContent = combo >= 5 ? `🔥 ${combo} 콤보!` : '좋아요!'; } else { combo = 0; $('msg').textContent = '앗, 스텝이 꼬였어요!'; }
+      flash(arena, ok); $('arr').textContent = ok ? '💃' : '😵'; upd(); after(280, next); };
+    $('pad').onclick = e => { const b = e.target.closest('button'); if (b) press(b.dataset.k); };
+    onKey(e => { if (DIRS.some(d => d[0] === e.key)) { e.preventDefault(); press(e.key); } });
+    loop(() => { if (!cur) return; const left = deadline - performance.now();
+      $('tb').style.width = Math.max(0, left / win * 100) + '%';
+      if (left <= 0) { cur = null; combo = 0; $('msg').textContent = '⏰ 늦었어요!'; flash(arena, false); upd(); after(280, next); } });
+    after(900, next);
+  },
+
+  // 시드니: 거북이 태깅
+  marine(arena, finish, hud) {
+    arena.style.background = 'linear-gradient(#7ec8e3, #2e86ab)'; arena.style.height = '340px';
+    let tagged = 0, penalty = 0, fish = [], spawnT = 0;
+    const upd = () => hud(null, `🐢 ${tagged}/10  🦈 -${penalty}`); upd();
+    arena.onclick = e => { const f = e.target.closest('.fish'); if (!f || f.dataset.done) return;
+      f.dataset.done = 1;
+      if (f.dataset.k === 't') { tagged++; f.textContent = '🏷️'; flash(arena, true); }
+      else if (f.dataset.k === 's') { penalty++; f.textContent = '💢'; flash(arena, false); }
+      else { f.textContent = '💨'; }
+      upd(); };
+    loop(dt => {
+      spawnT -= dt; const W = arena.clientWidth, H = arena.clientHeight;
+      if (spawnT <= 0) { spawnT = 0.55;
+        const r = Math.random(), k = r < 0.35 ? 't' : r < 0.55 ? 's' : 'f';
+        const dir = Math.random() < 0.5 ? 1 : -1, el = document.createElement('div');
+        el.className = 'fish'; el.dataset.k = k; el.textContent = k === 't' ? '🐢' : k === 's' ? '🦈' : pick(['🐠','🐟','🐡','🦑']);
+        if (dir === 1) el.style.transform = 'scaleX(-1)';
+        const o = { el, x: dir === 1 ? -50 : W + 10, y: 10 + Math.random() * (H - 60), v: dir * (90 + Math.random() * 120) };
+        arena.appendChild(el); fish.push(o); }
+      fish = fish.filter(o => { o.x += o.v * dt; o.el.style.left = o.x + 'px'; o.el.style.top = o.y + 'px';
+        if (o.x < -60 || o.x > W + 20) { o.el.remove(); return false; } return true; });
+    });
+    countdown(30, hud, () => finish(tagged * 10 - penalty * 10));
+  },
+};
+
+// ---------- Boot ----------
+$('resetBtn').onclick = () => {
+  openModal(`<h2>처음부터 다시 할까요?</h2><p class="muted">돈, 도장, 기록이 모두 초기화돼요.</p>
+    <div class="ctrls"><button id="yes">다시 시작</button><button class="secondary" id="no">취소</button></div>`);
+  $('no').onclick = closeModal;
+  $('yes').onclick = () => { S = structuredClone(START); save(); closeModal(); renderAll(); intro(); };
+};
+function intro() {
+  openModal(`<div class="center"><div class="big">🌍🧳</div><h2>월드 잡 트립에 오신 걸 환영해요!</h2>
+    <p>서울에서 $800을 들고 출발해 세계 6개 도시를 여행하며<br>그 나라의 직업을 직접 체험해 보세요.</p>
+    <p class="muted">✈️ 비행기표를 사서 이동 → 💼 현지 직업 미니게임 → 💰 일당으로 다음 여행!<br>60점 이상이면 직업 여권에 도장 🛂</p>
+    <div class="ctrls"><button id="okBtn">여행 시작!</button></div></div>`);
+  $('okBtn').onclick = closeModal;
+}
+renderAll();
+if (!S.log.length) intro();
+</script>
+</body>
+</html>
